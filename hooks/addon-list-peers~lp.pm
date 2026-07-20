@@ -26,7 +26,7 @@ sub init {
 sub cmd_details {
 	return
 	"List WireGuard peers registered in the vault registry.\n".
-	"Usage: genesis do <env> -- list-peers\n";
+	"Usage: genesis <env> do list-peers\n";
 }
 
 sub perform {
@@ -35,7 +35,7 @@ sub perform {
 	my @names = $self->_wg_list_peers;
 	if (!@names) {
 		info("No peers registered. Add one with:");
-		info("  #G{genesis do $ENV{GENESIS_ENVIRONMENT} -- add-peer <name>}");
+		info("  #G{genesis $ENV{GENESIS_ENVIRONMENT} do add-peer <name>}");
 		return $self->done();
 	}
 

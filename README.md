@@ -12,9 +12,9 @@ cd wireguard-deployments
 genesis new my-env
 genesis deploy my-env
 
-genesis do my-env -- add-peer laptop
+genesis my-env do add-peer laptop
 genesis deploy my-env
-genesis do my-env -- generate-wg-config laptop -q
+genesis my-env do generate-wg-config laptop -q
 ```
 
 ## Highlights

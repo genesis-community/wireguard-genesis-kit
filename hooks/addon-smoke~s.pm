@@ -19,7 +19,7 @@ sub init {
 sub cmd_details {
 	return
 	"Run the colocated smoke-tests errand against the WireGuard endpoint.\n".
-	"Usage: genesis do <env> -- smoke\n";
+	"Usage: genesis <env> do smoke\n";
 }
 
 sub perform {

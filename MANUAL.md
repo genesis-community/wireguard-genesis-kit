@@ -56,11 +56,11 @@ manifests or repos.
 
 | Addon | Alias | Usage |
 |-------|-------|-------|
-| add-peer | ap | `genesis do <env> -- add-peer <name> [extra-cidr ...]` |
-| remove-peer | rp | `genesis do <env> -- remove-peer <name>` |
-| list-peers | lp | `genesis do <env> -- list-peers` |
-| generate-wg-config | gw | `genesis do <env> -- generate-wg-config [-q] <name>` |
-| smoke | s | `genesis do <env> -- smoke` |
+| add-peer | ap | `genesis <env> do add-peer <name> [extra-cidr ...]` |
+| remove-peer | rp | `genesis <env> do remove-peer <name>` |
+| list-peers | lp | `genesis <env> do list-peers` |
+| generate-wg-config | gw | `genesis <env> do generate-wg-config [-q] <name>` |
+| smoke | s | `genesis <env> do smoke` |
 
 `generate-wg-config -q` renders the config as a terminal QR code
 (requires `qrencode`) for direct import into mobile clients.
@@ -95,10 +95,10 @@ result in `params.wireguard_endpoint`.
 After deploy:
 
 ```sh
-genesis do <env> -- smoke        # colocated errand: interface, port, peers
-genesis do <env> -- add-peer laptop
+genesis <env> do smoke        # colocated errand: interface, port, peers
+genesis <env> do add-peer laptop
 genesis deploy <env>
-genesis do <env> -- generate-wg-config laptop
+genesis <env> do generate-wg-config laptop
 ```
 
 On the client, `wg show` should report a handshake within seconds of

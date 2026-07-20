@@ -32,11 +32,11 @@ sub perform {
 	info("#M{$ENV{GENESIS_ENVIRONMENT}} WireGuard deployed successfully!");
 	info("");
 	info("Verify the endpoint with:");
-	info("  #G{genesis do $ENV{GENESIS_ENVIRONMENT} -- smoke}");
+	info("  #G{genesis $ENV{GENESIS_ENVIRONMENT} do smoke}");
 	info("");
 	info("Manage peers with:");
-	info("  #G{genesis do $ENV{GENESIS_ENVIRONMENT} -- add-peer <name>}");
-	info("  #G{genesis do $ENV{GENESIS_ENVIRONMENT} -- generate-wg-config <name>}");
+	info("  #G{genesis $ENV{GENESIS_ENVIRONMENT} do add-peer <name>}");
+	info("  #G{genesis $ENV{GENESIS_ENVIRONMENT} do generate-wg-config <name>}");
 	info("");
 	info("Peer changes take effect on the next #C{genesis deploy} (applied");
 	info("via wg syncconf - established sessions are not interrupted).");

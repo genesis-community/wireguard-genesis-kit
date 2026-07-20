@@ -33,9 +33,9 @@ sub perform {
 	info("  public key: %s", $pubkey || 'unknown');
 	info("");
 	info("Manage peers with:");
-	info("  #G{genesis do $ENV{GENESIS_ENVIRONMENT} -- list-peers}");
-	info("  #G{genesis do $ENV{GENESIS_ENVIRONMENT} -- add-peer <name>}");
-	info("  #G{genesis do $ENV{GENESIS_ENVIRONMENT} -- generate-wg-config <name>}");
+	info("  #G{genesis $ENV{GENESIS_ENVIRONMENT} do list-peers}");
+	info("  #G{genesis $ENV{GENESIS_ENVIRONMENT} do add-peer <name>}");
+	info("  #G{genesis $ENV{GENESIS_ENVIRONMENT} do generate-wg-config <name>}");
 
 	return $self->done(1);
 }
