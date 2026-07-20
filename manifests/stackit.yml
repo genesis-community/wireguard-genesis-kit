@@ -1,0 +1,6 @@
+---
+# STACKIT-specific configurations for WireGuard
+
+instance_groups:
+- name: wireguard
+  vm_extensions: []
