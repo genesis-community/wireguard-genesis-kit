@@ -38,8 +38,10 @@ sub perform {
 			$self->network_definition('wireguard', strategy => 'ocfp',
 				dynamic_subnets => {
 					allocation => {
+						# Static IPs come from the ocfp reserved-ips (one
+						# wireguard_ip per subnet), not a pre-sized block.
 						size => 0,
-						statics => 1,
+						statics => 0,
 					},
 					cloud_properties_for_iaas => {
 						aws => {
