@@ -1,0 +1,51 @@
+---
+azs:
+- name: z1
+  cloud_properties:
+    availability_zone: az1
+- name: z2
+  cloud_properties:
+    availability_zone: az2
+- name: z3
+  cloud_properties:
+    availability_zone: az3
+
+vm_types:
+- name: wireguard
+  cloud_properties:
+    instance_type: m1a.1d
+    root_disk_size: 16
+- name: default
+  cloud_properties:
+    instance_type: m1.medium
+    root_disk_size: 32
+
+networks:
+- name: default
+  type: manual
+  subnets:
+  - range: 10.0.0.0/24
+    gateway: 10.0.0.1
+    azs: [z1, z2, z3]
+    dns: [8.8.8.8, 8.8.4.4]
+    cloud_properties:
+      net_id: stackit-net-id
+
+- name: wireguard
+  type: manual
+  subnets:
+  - range: 10.0.1.0/24
+    gateway: 10.0.1.1
+    azs: [z1, z2, z3]
+    dns: [8.8.8.8, 8.8.4.4]
+    reserved: [ 10.0.1.1 - 10.0.1.15 ]
+    static: [ 10.0.1.16 - 10.0.1.30 ]
+    cloud_properties:
+      net_id: wireguard-net-id
+
+compilation:
+  workers: 5
+  reuse_compilation_vms: true
+  az: z1
+  vm_type: default
+  network: default

@@ -1,0 +1,12 @@
+---
+kit:
+  name:    dev
+  version: latest
+  features: []
+
+genesis:
+  env:    azure
+  entomb: false
+
+params:
+  azure_availability_set: test-set

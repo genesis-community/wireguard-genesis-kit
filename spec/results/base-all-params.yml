@@ -1,0 +1,81 @@
+exodus:
+  bosh: some-other-env
+  endpoint: vpn.example.com:51999
+  features: ""
+  iaas: aws
+  ip: 10.99.0.20
+  is_director: false
+  port: 51999
+  public_key: <!{meta.vault}/server:public!>
+  scale: null
+  services: null
+  use_create_env: false
+instance_groups:
+- azs:
+  - z1
+  instances: 1
+  jobs:
+  - name: bpm
+    release: bpm
+  - name: wireguard
+    properties:
+      wireguard:
+        addresses:
+        - 10.99.77.1/24
+        forwarding:
+          ipv4: true
+        interface: wg9
+        listen_port: 51999
+        peers: []
+        private_key: <!{meta.vault}/server:private!>
+        public_key: <!{meta.vault}/server:public!>
+    release: wireguard
+  - name: iptables
+    properties:
+      iptables:
+        filter:
+          FORWARD:
+          - -s 10.99.77.0/24 -d 10.4.0.0/16 -m conntrack --ctstate NEW -j ACCEPT -m
+            comment --comment 'wg -> lan'
+          - -s 10.4.0.0/16 -d 10.99.77.0/24 -m conntrack --ctstate NEW -j ACCEPT -m
+            comment --comment 'lan -> wg'
+          - -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+        nat:
+          POSTROUTING:
+          - -s 10.99.77.0/24 -d 0/0 -j MASQUERADE
+    release: networking
+  - name: smoke-tests
+    properties:
+      wireguard:
+        interface: wg9
+        listen_port: 51999
+    release: wireguard
+  name: wireguard
+  networks:
+  - name: test-network
+    static_ips:
+    - 10.99.0.20
+  stemcell: default
+  vm_type: test-vm-type
+name: base-all-params-wireguard
+releases:
+- name: wireguard
+  version: 0.1.0
+- name: bpm
+  sha1: sha256:51f2eab4b59939db733beb8f7905e461a732cc29d85e54f151f576cd5bf0c414
+  url: https://bosh.io/d/github.com/cloudfoundry/bpm-release?v=1.4.22
+  version: 1.4.22
+- name: networking
+  sha1: 9b5f9d27917c3754e492470ac6c9af80d62963db
+  url: http://bosh.io/d/github.com/cloudfoundry/networking-release?v=9
+  version: 9
+stemcells:
+- alias: default
+  os: test-stemcell
+  version: 9.9.9
+update:
+  canaries: 1
+  canary_watch_time: 5000-120000
+  max_in_flight: 1
+  serial: true
+  update_watch_time: 5000-120000
