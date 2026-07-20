@@ -1,0 +1,25 @@
+---
+name:    wireguard
+version: 0.1.0
+
+author:
+  - Wayne Seguin <weseguin@fivetwenty.io>
+code:   https://github.com/genesis-community/wireguard-genesis-kit
+docs:   https://genesisproject.io/docs/
+
+genesis_version_min: 3.1.0
+
+supports:
+- aws
+- azure
+- gcp
+- openstack
+- pve
+- vsphere
+- stackit
+
+# No certificates/credentials block: WireGuard uses base64 Curve25519
+# keypairs, which the Genesis credentials DSL cannot generate. The
+# blueprint hook idempotently ensures the server keypair in vault
+# (hooks/lib/_wireguard_keys.pm), and the add-peer addon manages peer
+# keys.

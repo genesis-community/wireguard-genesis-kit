@@ -1,0 +1,8 @@
+# Generated at blueprint time from vault/ocfp state
+manifests/network.dynamic.yml
+manifests/peers.dynamic.yml
+
+*.tgz
+.DS_Store
+*.swp
+*~
