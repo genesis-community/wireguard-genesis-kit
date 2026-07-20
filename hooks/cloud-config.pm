@@ -52,7 +52,7 @@ sub perform {
 							'security_groups' => ['default']
 						},
 						pve => {
-							'bridge' => scalar($self->env->lookup('bosh-configs.cpi.pve_network_bridge', 'lvnet001')),
+							'bridge' => $self->_pve_network_bridge,
 						},
 						stackit => {
 							'net_id' => $self->network_reference('id'),
@@ -96,7 +96,7 @@ sub perform {
 						'cpu'            => scalar($self->env->lookup('bosh-configs.cpi.pve_wireguard_cpu', 2)),
 						'ram'            => scalar($self->env->lookup('bosh-configs.cpi.pve_wireguard_ram', 2048)),
 						'disk'           => scalar($self->env->lookup('bosh-configs.cpi.pve_wireguard_disk', 16384)),
-						'network_bridge' => scalar($self->env->lookup('bosh-configs.cpi.pve_network_bridge', 'lvnet001')),
+						'network_bridge' => $self->_pve_network_bridge,
 					},
 					stackit => {
 						'instance_type' => 'm1a.1d',
@@ -120,6 +120,15 @@ sub perform {
 	$self->done($config);
 
 	return 1;
+}
+
+# Bridge resolution order: explicit env override, then the bridge the
+# ocfp CLI recorded when configuring the CPI, then the legacy default.
+sub _pve_network_bridge {
+	my ($self) = @_;
+	return scalar($self->env->lookup('bosh-configs.cpi.pve_network_bridge',
+		scalar($self->env->ocfp_config_lookup('cpi.pve.network_bridge')) // 'lvnet001'
+	));
 }
 
 sub get_sgs_by_names {
