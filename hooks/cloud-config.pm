@@ -127,7 +127,7 @@ sub perform {
 sub _pve_network_bridge {
 	my ($self) = @_;
 	return scalar($self->env->lookup('bosh-configs.cpi.pve_network_bridge',
-		scalar($self->env->ocfp_config_lookup('cpi.pve.network_bridge')) // 'lvnet001'
+		scalar($self->env->ocfp_config_lookup('cpi.pve.network_bridge')) // 'vmbr0'
 	));
 }
 
