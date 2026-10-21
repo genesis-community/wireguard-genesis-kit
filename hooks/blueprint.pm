@@ -143,7 +143,8 @@ EOF
 
 # _process_resolute - Opt-in ubuntu-resolute stemcell support {{{
 # Called after every other fragment is added so that it overrides the
-# stemcell os default (ubuntu-noble) and the bpm release pin.
+# stemcell os default (ubuntu-noble) and the bpm release pin.  A deployment
+# repo's ops/resolute.yml is added last, so it can still adjust either.
 sub _process_resolute {
 	my ($self) = @_;
 
@@ -158,6 +159,8 @@ sub _process_resolute {
 		# bpm releases older than 1.4.41 do not compile on resolute, and this
 		# kit always runs wireguard under bpm.
 		$self->add_files('manifests/releases/bpm-resolute.yml');
+		# A deployment repo's ops/resolute.yml still applies, over the kit's files.
+		$self->add_files("$ENV{GENESIS_ROOT}/ops/resolute.yml") if -f "$ENV{GENESIS_ROOT}/ops/resolute.yml";
 	} elsif ($self->env->lookup('params.stemcell_os', 'ubuntu-noble') eq 'ubuntu-resolute') {
 		bail(
 			"The environment sets #c{params.stemcell_os} to ubuntu-resolute " .

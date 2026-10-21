@@ -25,57 +25,127 @@ sub init {
 # perform - Main hook execution {{{
 sub perform {
 	my ($self) = @_;
-	$self->_check_resolute_manifest if $self->want_feature('resolute');
+	$self->_check_resolute_manifest;
 	return $self->done(1);
 }
 # }}}
 
-# _check_resolute_manifest - every stemcell is resolute, and bpm is new enough {{{
+# _load_yaml - read a YAML file as a hash, redacted from the trace log {{{
+# The manifest and the BOSH variables file both hold secrets, so their
+# conversion never reaches the trace log.  Bails when the file cannot be read
+# or is not a YAML map, naming $what in the message.
+sub _load_yaml {
+	my ($self, $file, $what) = @_;
+	my ($out, $rc, $err) = run({stderr => 0, redact_output => 1}, 'spruce json < "$1"', $file);
+	my $data = $rc == 0 ? eval {load_json($out)} : undef;
+	bail(
+		"Cannot read %s at #C{%s} to check its stemcells and bpm release: %s",
+		$what, $file, ($err // '') =~ s/\s+$//r || ($rc ? "spruce exited $rc" : 'not a YAML map')
+	) unless ref($data) eq 'HASH';
+	return $data;
+}
+# }}}
+
+# _value - resolve ((name)) placeholders from the BOSH variables file {{{
+# BOSH fills ((name)) placeholders at deploy time from the variables file that
+# Genesis passes along, so they are resolved the same way before checking.  A
+# placeholder that no variable resolves bails, because the check cannot tell
+# what it deploys.
+sub _value {
+	my ($self, $value, $what) = @_;
+	return $value unless defined($value) && !ref($value) && $value =~ /\(\(/;
+	(my $resolved = $value) =~ s{\(\(\s*([^()\s]+)\s*\)\)}{
+		my $name = $1;
+		bail(
+			"The manifest sets %s to #R{((%s))}, which no BOSH variable in the ".
+			"environment resolves, so the resolute checks cannot tell what it ".
+			"deploys.  Set it in the environment file instead.", $what, $name
+		) unless defined($self->{vars}{$name}) && !ref($self->{vars}{$name});
+		$self->{vars}{$name};
+	}ge;
+	return $resolved;
+}
+# }}}
+
+# _list - the hash entries of a top-level manifest list {{{
+sub _list {
+	my ($self, $manifest, $key) = @_;
+	my $list = $manifest->{$key} // [];
+	bail(
+		"The manifest's #c{%s} key must be a list, not %s.", $key, ref($list) || 'a string'
+	) unless ref($list) eq 'ARRAY';
+	return grep {ref($_) eq 'HASH'} @$list;
+}
+# }}}
+
+# _check_resolute_manifest - resolute stemcells get a new enough bpm {{{
 # The blueprint gate reads params only, so an ops file from the deployment
 # repo can still override the stemcells or the bpm release.  The merged
-# manifest is the last word, so check that.  The manifest holds secrets, so
-# its conversion is redacted from the trace log.
+# manifest is the last word, so check that.  A stemcell is resolute when its
+# os is ubuntu-resolute, or when it has no os and its name names resolute.
+# With the feature on, every stemcell must be resolute.  With any resolute
+# stemcell, feature or not, bpm must be pinned to a new enough version.
 sub _check_resolute_manifest {
 	my ($self) = @_;
+	my $feature = $self->want_feature('resolute');
+
 	my $file = $ENV{GENESIS_MANIFEST_FILE};
 	bail(
-		"The #c{resolute} feature is enabled, but Genesis did not pass the ".
-		"manifest to the pre-deploy hook, so its stemcells cannot be checked."
+		"Genesis did not pass the manifest to the pre-deploy hook, so its ".
+		"stemcells and bpm release cannot be checked."
 	) unless defined($file) && -f $file && -r $file;
+	my $manifest = $self->_load_yaml($file, 'the manifest');
 
-	my ($out, $rc, $err) = run({stderr => 0, redact_output => 1}, 'spruce json < "$1"', $file);
-	my $manifest = $rc == 0 ? eval {load_json($out)} : undef;
-	bail(
-		"The #c{resolute} feature is enabled, but the manifest at #C{%s} could ".
-		"not be read to check its stemcells: %s",
-		$file, ($err // '') =~ s/\s+$//r || "spruce exited $rc"
-	) unless ref($manifest) eq 'HASH';
+	my $vars_file = $ENV{GENESIS_BOSHVARS_FILE};
+	$self->{vars} = (defined($vars_file) && -f $vars_file && -s $vars_file)
+		? $self->_load_yaml($vars_file, 'the BOSH variables file')
+		: {};
 
-	my $stemcells = $manifest->{stemcells};
-	bail(
-		"The #c{resolute} feature is enabled, but the manifest lists no stemcells."
-	) unless ref($stemcells) eq 'ARRAY' && @$stemcells;
+	my @stemcells = map {{
+		alias => $self->_value($_->{alias}, 'a stemcell alias') // '<none>',
+		os    => $self->_value($_->{os},    'a stemcell os'),
+		name  => $self->_value($_->{name},  'a stemcell name'),
+	}} $self->_list($manifest, 'stemcells');
+	my $is_resolute = sub {
+		my ($s) = @_;
+		return defined($s->{os}) ? $s->{os} eq 'ubuntu-resolute'
+		                         : ($s->{name} // '') =~ /ubuntu-resolute/;
+	};
 
-	my @wrong = map {
-		ref($_) eq 'HASH'
-			? sprintf("%s (#R{%s})", $_->{alias} // '?', $_->{os} // 'no os')
-			: '#R{an entry that is not a stemcell}'
-	} grep {
-		ref($_) ne 'HASH' || ($_->{os} // '') ne 'ubuntu-resolute'
-	} @$stemcells;
-	bail(
-		"The #c{resolute} feature is enabled, but the manifest deploys these ".
-		"stemcells on another OS: %s.  Remove the override that sets them.",
-		join(', ', @wrong)
-	) if @wrong;
+	if ($feature) {
+		bail(
+			"The #c{resolute} feature is enabled, but the manifest lists no stemcells."
+		) unless @stemcells;
+		my @wrong = grep {!$is_resolute->($_)} @stemcells;
+		bail(
+			"The #c{resolute} feature is enabled, but the manifest deploys these ".
+			"stemcells on another OS: %s.  Remove the override that sets them.",
+			join(', ', map {
+				defined($_->{os})
+					? sprintf("%s (os #R{%s})", $_->{alias}, $_->{os})
+					: sprintf("%s (name #R{%s})", $_->{alias}, $_->{name} // 'none')
+			} @wrong)
+		) if @wrong;
+	}
 
-	my @bpm = grep {ref($_) eq 'HASH' && ($_->{name} // '') eq 'bpm'} @{$manifest->{releases} // []};
-	for my $release (@bpm) {
-		my $version = $release->{version} // '';
+	return 1 unless grep {$is_resolute->($_)} @stemcells;
+
+	for my $release ($self->_list($manifest, 'releases')) {
+		next unless ($self->_value($release->{name}, 'a release name') // '') eq 'bpm';
+		my $version = $self->_value($release->{version}, 'the bpm release version');
+		bail(
+			"The manifest deploys bpm without a version on a resolute stemcell.  ".
+			"Pin bpm to %s or newer.", $RESOLUTE_MIN_BPM
+		) unless defined($version) && $version ne '';
+		bail(
+			"The manifest deploys bpm #R{latest} on a resolute stemcell.  Pin bpm ".
+			"to %s or newer, so the deploy cannot pick up an older upload.",
+			$RESOLUTE_MIN_BPM
+		) if $version eq 'latest';
 		bail(
 			"The manifest deploys bpm #R{%s} on a resolute stemcell, which needs ".
 			"bpm %s or newer.  Remove the override that sets the bpm release.",
-			$version || 'without a version', $RESOLUTE_MIN_BPM
+			$version, $RESOLUTE_MIN_BPM
 		) unless semver($version) && new_enough($version, $RESOLUTE_MIN_BPM);
 	}
 	return 1;
