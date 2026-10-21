@@ -12,6 +12,7 @@
 # extracted from PKCS#8 DER) so hooks work without wireguard-tools.
 
 use Genesis qw/bail run warning/;
+use File::Temp qw/tempdir/;
 
 # Relative prefix under GENESIS_SECRETS_BASE for wireguard secrets.
 # '' for the standalone wireguard kit; feature kits (e.g. jumpbox)
@@ -29,6 +30,41 @@ sub _wg_server_path { $_[0]->_wg_base . 'server' }
 sub _wg_peers_base  { $_[0]->_wg_base . 'peers/' }
 sub _wg_revoked_base{ $_[0]->_wg_base . 'revoked/' }
 
+# _wg_secret_file - write a secret to a private temporary file {{{
+# Keys are handed to wg, openssl, and safe through files, because a command
+# line argument is readable by every local user for as long as the process
+# runs.  The directory is created 0700 and removed when the hook exits.
+my $_wg_tmpdir;
+sub _wg_secret_file {
+	my ($self, $name, $value) = @_;
+	$_wg_tmpdir //= tempdir('wireguard-keys-XXXXXX', TMPDIR => 1, CLEANUP => 1);
+	my $file = "$_wg_tmpdir/$name";
+	my $old = umask(077);
+	my $ok = open(my $fh, '>', $file);
+	umask($old);
+	bail("Cannot write a temporary key file in %s: %s", $_wg_tmpdir, $!) unless $ok;
+	print $fh $value;
+	close($fh) or bail("Cannot write a temporary key file in %s: %s", $_wg_tmpdir, $!);
+	return $file;
+}
+# }}}
+
+# _wg_safe_set - store fields at a vault path, secrets through files {{{
+# Takes the path, a hash of fields, and the names of the fields that are
+# secret.  Secret fields reach safe with its key@file form, so their values
+# never appear on a command line.
+sub _wg_safe_set {
+	my ($self, $path, $fields, @secret) = @_;
+	my %secret = map {$_ => 1} @secret;
+	my @args = map {
+		$secret{$_} ? "$_\@".$self->_wg_secret_file("set-$_", $fields->{$_}) : "$_=$fields->{$_}"
+	} sort keys %$fields;
+	my (undef, $rc) = run({stderr => 0}, 'safe set "$@"', $path, @args);
+	unlink(map {"$_wg_tmpdir/set-$_"} grep {$secret{$_}} keys %$fields) if $_wg_tmpdir;
+	return $rc;
+}
+# }}}
+
 # _wg_keypair - generate (private, public) base64 Curve25519 pair {{{
 sub _wg_keypair {
 	my ($self) = @_;
@@ -36,7 +72,7 @@ sub _wg_keypair {
 	my ($priv, $rc) = run({stderr => 0}, 'wg genkey 2>/dev/null');
 	$priv = defined($priv) ? $priv : ''; chomp($priv);
 	if (!$rc && $priv) {
-		my ($pub, $prc) = run({stderr => 0}, 'printf \'%s\' "$1" | wg pubkey', $priv);
+		my ($pub, $prc) = run({stderr => 0}, 'wg pubkey < "$1"', $self->_wg_secret_file('genkey', $priv));
 		$pub = defined($pub) ? $pub : ''; chomp($pub);
 		return ($priv, $pub) if !$prc && $pub;
 	}
@@ -51,8 +87,8 @@ sub _wg_keypair {
 
 	my ($pub, $prc) = run({stderr => 0},
 		'{ printf \'\x30\x2e\x02\x01\x00\x30\x05\x06\x03\x2b\x65\x6e\x04\x22\x04\x20\'; '.
-		'printf \'%s\' "$1" | base64 -d; } | openssl pkey -inform DER -pubout -outform DER 2>/dev/null '.
-		'| tail -c 32 | base64', $priv);
+		'base64 -d < "$1"; } | openssl pkey -inform DER -pubout -outform DER 2>/dev/null '.
+		'| tail -c 32 | base64', $self->_wg_secret_file('genpkey', $priv));
 	$pub = defined($pub) ? $pub : ''; chomp($pub);
 	bail("Cannot derive WireGuard public key via openssl") if $prc || !$pub;
 
@@ -84,9 +120,7 @@ sub _ensure_server_keys {
 	return 1 if $rc == 0;
 
 	my ($priv, $pub) = $self->_wg_keypair;
-	my (undef, $set_rc) = run({stderr => 0},
-		'safe set "$1" "private=$2" "public=$3"',
-		$path, $priv, $pub);
+	my $set_rc = $self->_wg_safe_set($path, {private => $priv, public => $pub}, 'private');
 	bail("Failed to store WireGuard server keypair at %s", $path) if $set_rc;
 	return 1;
 }
