@@ -148,13 +148,15 @@ sub _wg_registry_names {
 	my $base = $self->_wg_peers_base;
 	my ($out, $rc, $err) = run({stderr => 0}, 'safe paths "$1"', $base);
 	if ($rc) {
-		# An empty registry reads as "no secret exists" — only complain
-		# about other failures (unreachable vault, auth, ...).
-		warning(
-			"wireguard peer registry lookup failed (safe paths %s): %s",
-			$base, $err || 'no output'
-		) unless ($err || '') =~ /no secret exists/;
-		return ();
+		# An empty registry reads as "no secret exists".  Any other failure
+		# (unreachable vault, auth, ...) must stop the caller, because an
+		# empty list would drop every peer from the next deploy.
+		my $msg = _wg_clean_err($err);
+		return () if $msg =~ /no secret exists/;
+		bail(
+			"The wireguard peer registry at #C{%s} could not be listed (safe paths exited %d): %s",
+			$base, $rc, $msg || 'no output'
+		);
 	}
 	return () if !$out;
 	my %seen;
@@ -238,7 +240,7 @@ sub _wg_peer_get {
 sub _wg_alloc_address {
 	my ($self, $cidr) = @_;
 	my ($ip, $bits) = $cidr =~ m{^(\d+\.\d+\.\d+\.\d+)/(\d+)$}
-		or bail("Invalid wireguard_cidr '%s' — expected a.b.c.d/nn", $cidr);
+		or bail("Invalid wireguard_cidr '%s', which should look like a.b.c.d/nn", $cidr);
 	bail("wireguard_cidr prefix /%s too small for peer allocation", $bits) if $bits > 30;
 
 	my $to_int   = sub { my @o = split /\./, $_[0]; ($o[0]<<24)|($o[1]<<16)|($o[2]<<8)|$o[3] };
