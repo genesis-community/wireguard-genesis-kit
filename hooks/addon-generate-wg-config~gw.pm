@@ -65,7 +65,7 @@ sub perform {
 	my $endpoint = $self->env->lookup('params.wireguard_endpoint', '');
 	$endpoint ||= eval { $self->env->exodus_lookup('ip', '') } || '';
 	$endpoint ||= $self->_get_wireguard_ip;
-	bail("Cannot determine the WireGuard endpoint — set params.wireguard_endpoint")
+	bail("Cannot determine the WireGuard endpoint.  Set params.wireguard_endpoint.")
 		unless $endpoint;
 	$endpoint .= ":$port" unless $endpoint =~ /:\d+$/;
 
@@ -92,7 +92,7 @@ sub perform {
 
 	if ($opts{qr}) {
 		my (undef, $qr_missing) = run({stderr => 0}, 'command -v qrencode');
-		bail("qrencode not found in PATH — install it for -q output") if $qr_missing;
+		bail("qrencode was not found in PATH.  Install it to use -q.") if $qr_missing;
 		# The config holds the private key and the preshared key, so qrencode
 		# reads it from a private file rather than from a command line.  It
 		# runs interactively so that the QR code goes straight to the terminal.
