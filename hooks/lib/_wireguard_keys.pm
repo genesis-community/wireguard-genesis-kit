@@ -126,8 +126,10 @@ sub _ensure_server_keys {
 }
 # }}}
 
-# _wg_list_peers - names registered under the peer registry {{{
-sub _wg_list_peers {
+# _wg_registry_names - every name listed under the peer registry {{{
+# Includes entries with no data, which a KV v2 mount keeps listing after
+# their latest version is deleted.  Use _wg_list_peers for live peers.
+sub _wg_registry_names {
 	my ($self) = @_;
 	my $base = $self->_wg_peers_base;
 	my ($out, $rc, $err) = run({stderr => 0}, 'safe paths "$1"', $base);
@@ -146,12 +148,62 @@ sub _wg_list_peers {
 		next unless $line =~ /^\Q$base\E(.+)$/;
 		$seen{$1} = 1;
 	}
-	# A KV v2 mount keeps listing a peer whose latest version was deleted,
-	# as an older remove-peer left behind, so only count peers with data.
+	return sort keys %seen;
+}
+# }}}
+
+# _wg_clean_err - safe's error output without colour codes or edge whitespace {{{
+# Returns '' for undef, so callers can test for "no error output" directly.
+sub _wg_clean_err {
+	my ($err) = @_;
+	$err = defined($err) ? $err : '';
+	$err =~ s/\e\[[0-9;]*m//g;
+	$err =~ s/^\s+|\s+$//g;
+	return $err;
+}
+# }}}
+
+# _wg_path_exists - whether a vault path holds data, failing on vault errors {{{
+# `safe exists` exits 1 both for an absent path and for a vault error, and
+# only the error writes to stderr.  Returns 1 when the path has data and 0
+# when it is absent, and bails on anything else, naming $what in the message,
+# so that a vault failure is never read as a missing secret.
+sub _wg_path_exists {
+	my ($self, $path, $what) = @_;
+	my (undef, $rc, $err) = run({stderr => 0}, 'safe exists "$1"', $path);
+	return 1 if $rc == 0;
+	$err = _wg_clean_err($err);
+	return 0 if $rc == 1 && $err eq '';
+	bail(
+		"Cannot tell whether %s at %s exists, because safe exited %d: %s",
+		$what, $path, $rc, $err || 'no error output'
+	);
+}
+# }}}
+
+# _wg_list_peers - names of registered peers that hold data {{{
+# A KV v2 mount keeps listing a peer whose latest version was deleted, as an
+# older remove-peer left behind, so only peers with data count.  A vault
+# error on any peer bails rather than dropping it, because a dropped peer
+# would vanish from the next deploy and its address would be handed out again.
+sub _wg_list_peers {
+	my ($self) = @_;
+	my $base = $self->_wg_peers_base;
 	return grep {
-		my (undef, $exists_rc) = run({stderr => 0}, 'safe exists "$1"', $base.$_);
-		$exists_rc == 0;
-	} sort keys %seen;
+		$self->_wg_path_exists($base.$_, "wireguard peer '$_'");
+	} $self->_wg_registry_names;
+}
+# }}}
+
+# _wg_destroy_entry - destroy every version of a vault path {{{
+# Returns safe's exit code and its cleaned error output.  With --force, safe
+# treats an absent path as success, so a KV v1 entry that a move already
+# removed reports 0.
+sub _wg_destroy_entry {
+	my ($self, $path) = @_;
+	my (undef, $rc, $err) = run({stderr => 0}, 'safe delete --force --destroy --all "$1"', $path);
+	$err = _wg_clean_err($err);
+	return ($rc, $err);
 }
 # }}}
 

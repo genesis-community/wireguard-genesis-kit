@@ -7,7 +7,7 @@ use warnings; # Genesis min perl version is 5.20
 BEGIN {push @INC, $ENV{GENESIS_LIB} ? $ENV{GENESIS_LIB} : $ENV{HOME}.'/.genesis/lib'}
 
 use parent qw(Genesis::Hook::Addon);
-use Genesis qw/bail info run/;
+use Genesis qw/bail info run warning/;
 
 # Include WireGuard key/peer helpers from mixin
 BEGIN {
@@ -40,9 +40,8 @@ sub perform {
 	my ($name) = @args;
 	my $peer_path = $self->_wg_peers_base . $name;
 
-	my (undef, $exists_rc) = run({stderr => 0},
-		'safe --quiet exists "$1"', $peer_path);
-	bail("Peer '%s' is not registered", $name) if $exists_rc != 0;
+	return $self->_clean_empty_entry($name, $peer_path)
+		unless $self->_wg_path_exists($peer_path, "wireguard peer '$name'");
 
 	my $revoked_path = $self->_wg_revoked_base . $name . '-' . time();
 	my (undef, $rc) = run({stderr => 0},
@@ -50,8 +49,16 @@ sub perform {
 	bail("Failed to move peer '%s' to %s", $name, $revoked_path) if $rc;
 	# On a KV v2 mount the move only marks the source deleted, and its path
 	# stays listed with no data, which the blueprint then refuses.  Destroying
-	# every version clears it, and on KV v1 the source is already gone.
-	run({stderr => 0}, 'safe delete --force --destroy --all "$1"', $peer_path);
+	# every version clears it, and on KV v1 the source is already gone.  The
+	# peer is already revoked by now, so a failure here only warns.
+	my ($del_rc, $del_err) = $self->_wg_destroy_entry($peer_path);
+	warning(
+		"Peer '%s' moved to %s, but its registry entry could not be destroyed ".
+		"(safe exited %d: %s).  The entry may still hold a soft-deleted version ".
+		"that an undelete could restore.  Destroy it by hand with:\n".
+		"  safe delete --force --destroy --all %s",
+		$name, $revoked_path, $del_rc, $del_err || 'no error output', $peer_path
+	) if $del_rc;
 
 	info("");
 	info("Peer #C{%s} moved to #Y{%s}", $name, $revoked_path);
@@ -61,6 +68,31 @@ sub perform {
 
 	return $self->done();
 }
+
+# _clean_empty_entry - destroy a listed registry entry that holds no data {{{
+# An older remove-peer moved peers away without destroying their entries, so
+# on a KV v2 mount the name stays listed with no data.  Such an entry is
+# destroyed here; a name that is not listed at all is not registered.
+sub _clean_empty_entry {
+	my ($self, $name, $peer_path) = @_;
+	bail("Peer '%s' is not registered", $name)
+		unless grep {$_ eq $name} $self->_wg_registry_names;
+
+	my ($rc, $err) = $self->_wg_destroy_entry($peer_path);
+	bail(
+		"Peer '%s' has an empty registry entry left by an older remove-peer, ".
+		"but it could not be destroyed (safe exited %d: %s).  Destroy it by ".
+		"hand with:\n  safe delete --force --destroy --all %s",
+		$name, $rc, $err || 'no error output', $peer_path
+	) if $rc;
+
+	info("");
+	info("Peer #C{%s} had no data, only an empty registry entry that an older", $name);
+	info("remove-peer left behind.  That entry is now destroyed, so the peer is");
+	info("no longer listed.");
+	return $self->done();
+}
+# }}}
 
 1;
 # vim: set ts=2 sw=2 sts=2 noet fdm=marker foldlevel=1:
