@@ -1,0 +1,79 @@
+exodus:
+  bosh: resolute
+  endpoint: ""
+  features: resolute
+  iaas: aws
+  ip: 10.99.0.16
+  is_director: false
+  port: 51820
+  public_key: <!{meta.vault}/server:public!>
+  scale: null
+  services: null
+  use_create_env: false
+instance_groups:
+- azs:
+  - z1
+  instances: 1
+  jobs:
+  - name: bpm
+    release: bpm
+  - name: wireguard
+    properties:
+      wireguard:
+        addresses:
+        - 10.20.30.1/24
+        forwarding:
+          ipv4: true
+        interface: wg0
+        listen_port: 51820
+        peers: []
+        private_key: <!{meta.vault}/server:private!>
+        public_key: <!{meta.vault}/server:public!>
+    release: wireguard
+  - name: iptables
+    properties:
+      iptables:
+        filter:
+          FORWARD:
+          - -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+        nat:
+          POSTROUTING:
+          - -s 10.20.30.0/24 -d 0/0 -j MASQUERADE
+    release: networking
+  - name: smoke-tests
+    properties:
+      wireguard:
+        interface: wg0
+        listen_port: 51820
+    release: wireguard
+  name: wireguard
+  networks:
+  - name: wireguard
+    static_ips:
+    - 10.99.0.16
+  stemcell: default
+  vm_type: wireguard
+name: resolute-wireguard
+releases:
+- name: wireguard
+  sha1: c9797384280404c32c5858825f09a535edc23835
+  url: https://github.com/cloudfoundry-community/wireguard-boshrelease/releases/download/v0.1.0/wireguard-0.1.0.tgz
+  version: 0.1.0
+- name: bpm
+  sha1: sha256:7b445508d63d2171d892ba33f836087e1e519b9782f44c5fa5290323616ca8e6
+  url: https://bosh.io/d/github.com/cloudfoundry/bpm-release?v=1.4.41
+  version: 1.4.41
+- name: networking
+  sha1: 9b5f9d27917c3754e492470ac6c9af80d62963db
+  url: http://bosh.io/d/github.com/cloudfoundry/networking-release?v=9
+  version: 9
+stemcells:
+- alias: default
+  os: ubuntu-resolute
+  version: "0.184"
+update:
+  canaries: 1
+  canary_watch_time: 5000-120000
+  max_in_flight: 1
+  serial: true
+  update_watch_time: 5000-120000

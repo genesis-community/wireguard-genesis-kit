@@ -121,12 +121,16 @@ EOF
 	for my $feature ($self->features) {
 		if ($feature eq 'ocfp') {
 			$self->add_files('manifests/ocfp.yml');
+		} elsif ($feature eq 'resolute') {
+			# Handled after the loop so that it overrides every other fragment.
 		} elsif (-f "$ENV{GENESIS_ROOT}/ops/${feature}.yml") {
 			$self->add_files("$ENV{GENESIS_ROOT}/ops/${feature}.yml");
 		} else {
 			push @invalid, $feature;
 		}
 	}
+
+	$self->_process_resolute;
 
 	bail(
 		"Invalid %s encountered: %s",
@@ -136,6 +140,34 @@ EOF
 
 	return $self->done(1);
 }
+
+# _process_resolute - Opt-in ubuntu-resolute stemcell support {{{
+# Called after every other fragment is added so that it overrides the
+# stemcell os default (ubuntu-noble) and the bpm release pin.
+sub _process_resolute {
+	my ($self) = @_;
+
+	if ($self->want_feature('resolute')) {
+		my $stemcell_os = $self->env->lookup('params.stemcell_os', 'ubuntu-resolute');
+		bail(
+			"The #c{resolute} feature sets the stemcell os to ubuntu-resolute, but " .
+			"the environment sets #c{params.stemcell_os} to #R{%s}.  " .
+			"Remove that parameter.", $stemcell_os
+		) if $stemcell_os ne 'ubuntu-resolute';
+		$self->add_files('manifests/resolute.yml');
+		# bpm releases older than 1.4.41 do not compile on resolute, and this
+		# kit always runs wireguard under bpm.
+		$self->add_files('manifests/releases/bpm-resolute.yml');
+	} elsif ($self->env->lookup('params.stemcell_os', 'ubuntu-noble') eq 'ubuntu-resolute') {
+		bail(
+			"The environment sets #c{params.stemcell_os} to ubuntu-resolute " .
+			"without the #c{resolute} feature.  Enable the feature and remove " .
+			"that parameter."
+		);
+	}
+	return;
+}
+# }}}
 
 1;
 # vim: set ts=2 sw=2 sts=2 noet fdm=marker foldlevel=1:

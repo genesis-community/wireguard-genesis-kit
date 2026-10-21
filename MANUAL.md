@@ -20,7 +20,7 @@ sessions.
 | wireguard_network | wireguard | BOSH network name |
 | wireguard_vm_type | wireguard | BOSH vm_type name |
 | availability_zones | [z1] | AZs for the instance group |
-| stemcell_os | ubuntu-noble | Required — the release needs the in-kernel WireGuard module |
+| stemcell_os | ubuntu-noble | The stemcell needs the in-kernel WireGuard module; use the `resolute` feature instead of setting this to ubuntu-resolute |
 
 `genesis new` prompts for the CIDR, port, routed networks, DNS, and
 endpoint, and derives the conntrack FORWARD rules for you.
@@ -51,6 +51,30 @@ manifests or repos.
 | Feature | Purpose |
 |---------|---------|
 | ocfp | OCFP topology: static IP from `net.subnets` reserved-ips key `wireguard_ip`, generated network fragment, ocfp naming for network/vm_type |
+| resolute | Deploys the endpoint on the `ubuntu-resolute` stemcell instead of the default `ubuntu-noble`, and is still experimental. See [Ubuntu Resolute Stemcells](#ubuntu-resolute-stemcells). |
+
+## Ubuntu Resolute Stemcells
+
+The kit deploys the endpoint on an ubuntu-noble stemcell unless we ask for something else. Adding the `resolute` feature moves the endpoint onto ubuntu-resolute.
+
+```yaml
+kit:
+  features:
+  - resolute
+
+params:
+  stemcell_version: "0.184"
+```
+
+The feature is experimental, so we recommend trying it on a canary deployment before we point anything real at it. We have not deployed this kit on ubuntu-resolute yet. The jumpbox kit's `wireguard` feature runs the same wireguard, bpm, and networking releases, and it ran live on ubuntu-resolute 0.184, which tells us the in-kernel WireGuard module is present on that stemcell. The kit renders the right stemcell and the right releases with the feature on its own and together with the `ocfp` feature.
+
+The feature sets the stemcell `os` to `ubuntu-resolute`, and `stemcell_version` still selects the version, which defaults to `latest`. We recommend pinning it to a resolute version such as `"0.184"`. A `latest` version resolves among the stemcells of that one operating system, so when someone uploads a newer resolute stemcell, the next deploy moves the endpoint onto it. A pinned `stemcell_version` has to be a resolute version, because the kit does not check that the number belongs to resolute. The director complains only at deploy time, and only when it has no such stemcell.
+
+Because the feature owns the stemcell os, the kit refuses an environment that sets `params.stemcell_os` to anything else. It also refuses an environment that sets `params.stemcell_os` to `ubuntu-resolute` without turning the feature on, so an environment that used to rely on that parameter alone needs to add the feature and drop the parameter.
+
+Before the first deploy, we upload the resolute stemcell to the director that deploys the endpoint. The director's runtime config must also carry bosh-dns 1.39.31 or later, because earlier bosh-dns releases do not run on resolute.
+
+The kit always runs wireguard under bpm, and bpm releases older than 1.4.41 do not compile on resolute. When the `resolute` feature is on, the kit pins bpm to 1.4.41, and otherwise it leaves the bpm version alone. Resolute also ships without runit, so the `chpst` command is missing, and a job whose start script drops privileges with `chpst` hangs there. The wireguard release does not use `chpst`, and the networking release ran on resolute under the jumpbox kit, but we should check any other release we add to the deployment before we move it to resolute.
 
 ## Addons
 

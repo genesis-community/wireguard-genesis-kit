@@ -1,0 +1,11 @@
+---
+# bpm for ubuntu-resolute.  Loaded by the resolute feature, because bpm
+# releases older than 1.4.41 do not compile on resolute and this kit always
+# runs wireguard under bpm.  When manifests/releases/bpm.yml moves past this
+# version, bump this file with it so that resolute does not run an older bpm
+# than the default.  It merges over manifests/releases/bpm.yml by release name.
+releases:
+- name: bpm
+  version: 1.4.41
+  url: https://bosh.io/d/github.com/cloudfoundry/bpm-release?v=1.4.41
+  sha1: sha256:7b445508d63d2171d892ba33f836087e1e519b9782f44c5fa5290323616ca8e6

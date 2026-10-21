@@ -19,7 +19,7 @@ genesis my-env do generate-wg-config laptop -q
 
 ## Highlights
 
-- ubuntu-noble stemcells only (kernel WireGuard module required)
+- ubuntu-noble stemcells by default, and ubuntu-resolute through the experimental `resolute` feature (the stemcell must ship the kernel WireGuard module)
 
 - No x509: keys are base64 Curve25519. The blueprint hook ensures the
   server keypair in vault; the credentials DSL is not involved
