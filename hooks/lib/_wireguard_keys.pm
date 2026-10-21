@@ -146,7 +146,12 @@ sub _wg_list_peers {
 		next unless $line =~ /^\Q$base\E(.+)$/;
 		$seen{$1} = 1;
 	}
-	return sort keys %seen;
+	# A KV v2 mount keeps listing a peer whose latest version was deleted,
+	# as an older remove-peer left behind, so only count peers with data.
+	return grep {
+		my (undef, $exists_rc) = run({stderr => 0}, 'safe exists "$1"', $base.$_);
+		$exists_rc == 0;
+	} sort keys %seen;
 }
 # }}}
 

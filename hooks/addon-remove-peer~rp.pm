@@ -48,6 +48,10 @@ sub perform {
 	my (undef, $rc) = run({stderr => 0},
 		'safe mv "$1" "$2"', $peer_path, $revoked_path);
 	bail("Failed to move peer '%s' to %s", $name, $revoked_path) if $rc;
+	# On a KV v2 mount the move only marks the source deleted, and its path
+	# stays listed with no data, which the blueprint then refuses.  Destroying
+	# every version clears it, and on KV v1 the source is already gone.
+	run({stderr => 0}, 'safe delete --force --destroy --all "$1"', $peer_path);
 
 	info("");
 	info("Peer #C{%s} moved to #Y{%s}", $name, $revoked_path);
